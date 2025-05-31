@@ -1,6 +1,9 @@
-import express from "express"
+import express, { Request, Response } from "express"
 import cors from "cors"
 import dotenv from "dotenv"
+import { StreamChat } from "stream-chat"
+import OpenAI from "openai"
+import { GoogleGenerativeAI } from "@google/generative-ai"
 
 // Load environment variables from .env file
 dotenv.config()
@@ -16,6 +19,94 @@ app.use(express.json())
 
 // urlencoded middleware to parse URL-encoded bodies
 app.use(express.urlencoded({ extended: false }))
+
+// Initialize Stream Chat client
+const chatClient = StreamChat.getInstance(
+    process.env.STREAM_API_KEY!,
+    process.env.STREAM_SECRET_KEY!
+)
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+})
+
+// Initialize Google GenAI client
+const genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+
+//register user with stream chat
+app.post("/register-user", async (req: Request, res: Response): Promise<any> => {
+
+    const { name, email } = req.body || {}
+    if (!name || !email) {
+        return res.status(400).json({ error: "Name and email are required" })
+    }
+
+    try {
+        const userId = email.replace(/[^a-zA-Z0-9_-]/g, "_")
+        // Check if the user already exists
+        const userResponse = await chatClient.queryUsers({ id: { $eq: userId } });
+
+        console.log("User response:", userResponse)
+
+        if (!userResponse.users.length) {
+            await chatClient.upsertUser({
+                id: userId,
+                name: name,
+                role: "user",
+                ...{ email }
+            })
+        }
+
+        res.status(200).json({ userId, name, email })
+    }
+    catch (error) {
+        res.status(500).json({ error: "Failed to register user" })
+    }
+})
+
+//Send Message to AI
+app.post("/chat", async (req: Request, res: Response): Promise<any> => {
+    const { userId, message } = req.body || {}
+
+    if (!userId || !message) {
+        return res.status(400).json({ error: "User ID and message are required" })
+    }
+
+    try {
+        //verify user exists
+        const userResponse = await chatClient.queryUsers({ id: userId });
+        if (!userResponse.users.length) {
+            return res.status(404).json({ error: "User not found" })
+        }
+        // Send message to OpenAI (to get the response from OpenAI you need to pay for the API)
+        // const completion = openai.chat.completions.create({
+        //     model: "gpt-4o-mini",
+        //     messages: [
+        //         { role: "system", content: message }],
+        // });
+
+        // If you want to use Google GenAI instead, you can uncomment the following lines
+        const model = genai.getGenerativeModel({ model: "gemini-1.5-flash" })
+        const question = await model.generateContent(message)
+        const resultFromGenAI: string = (await question.response.text()) ?? "No response from AI"
+
+        // Create or update the chat channel
+        const channel = chatClient.channel('messaging', `chat-${userId}`, {
+            name: 'AI Chat',
+            created_by_id: 'ai_bot'
+        })
+        await channel.create()
+        await channel.sendMessage({
+            text: resultFromGenAI,
+            user_id: 'ai_bot',
+        })
+
+        res.status(200).json({ reply: resultFromGenAI })
+    } catch (error) {
+        return res.status(500).json({ error: "Failed to process chat message" })
+    }
+})
 
 const PORT = process.env.PORT || 5000
 
