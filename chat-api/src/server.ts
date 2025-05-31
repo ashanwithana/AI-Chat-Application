@@ -4,6 +4,10 @@ import dotenv from "dotenv"
 import { StreamChat } from "stream-chat"
 import OpenAI from "openai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { db } from "./config/database.js"
+import { chats, users } from "./db/schema.js"
+import { eq } from "drizzle-orm"
+import { ChatCompletionMessageParam } from "openai/resources"
 
 // Load environment variables from .env file
 dotenv.config()
@@ -58,6 +62,15 @@ app.post("/register-user", async (req: Request, res: Response): Promise<any> => 
             })
         }
 
+        //check if user exists in the database
+        const existinguser = await db.select().from(users).where(eq(users.userId, userId));
+
+        if (!existinguser.length) {
+            console.log("User not found in the database, inserting new user")
+            // Insert user into the database
+            await db.insert(users).values({ userId, name, email })
+        }
+
         res.status(200).json({ userId, name, email })
     }
     catch (error) {
@@ -72,6 +85,13 @@ app.post("/chat", async (req: Request, res: Response): Promise<any> => {
     if (!userId || !message) {
         return res.status(400).json({ error: "User ID and message are required" })
     }
+
+    // check if userId is valid
+        const existinguser = await db.select().from(users).where(eq(users.userId, userId));
+
+        if (!existinguser.length) {
+            return res.status(404).json({ error: "User not found in the database" })
+        }
 
     try {
         //verify user exists
@@ -90,6 +110,8 @@ app.post("/chat", async (req: Request, res: Response): Promise<any> => {
         const model = genai.getGenerativeModel({ model: "gemini-1.5-flash" })
         const question = await model.generateContent(message)
         const resultFromGenAI: string = (await question.response.text()) ?? "No response from AI"
+
+        await db.insert(chats).values({ userId, message, reply: resultFromGenAI })
 
         // Create or update the chat channel
         const channel = chatClient.channel('messaging', `chat-${userId}`, {
