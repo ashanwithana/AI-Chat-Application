@@ -1,0 +1,30 @@
+{
+  "name": "chat-api",
+  "version": "1.0.0",
+  "description": "Backend for AI integrated Chat Application",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsc --noEmit && tsx --watch src/server.ts",
+    "build": "tcs",
+    "start": "node dist/server.js"
+
+
+  },
+  "author": "Ashan Withana",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "openai": "^5.0.1",
+    "stream-chat": "^9.3.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.18",
+    "@types/express": "^5.0.2",
+    "@types/node": "^22.15.29",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}
