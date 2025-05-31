@@ -87,11 +87,11 @@ app.post("/chat", async (req: Request, res: Response): Promise<any> => {
     }
 
     // check if userId is valid
-        const existinguser = await db.select().from(users).where(eq(users.userId, userId));
+    const existinguser = await db.select().from(users).where(eq(users.userId, userId));
 
-        if (!existinguser.length) {
-            return res.status(404).json({ error: "User not found in the database" })
-        }
+    if (!existinguser.length) {
+        return res.status(404).json({ error: "User not found in the database" })
+    }
 
     try {
         //verify user exists
@@ -127,6 +127,28 @@ app.post("/chat", async (req: Request, res: Response): Promise<any> => {
         res.status(200).json({ reply: resultFromGenAI })
     } catch (error) {
         return res.status(500).json({ error: "Failed to process chat message" })
+    }
+})
+
+app.post("/get-messages", async (req: Request, res: Response): Promise<any> => {
+
+    const { userId } = req.body
+
+    if (!userId) {
+        return res.status(400).json({ error: "User ID is required" })
+    }
+
+    try {
+        // Check if user exists in the database
+        const existinguser = await db.select().from(users).where(eq(users.userId, userId));
+        if (!existinguser.length) {
+            return res.status(404).json({ error: "User not found in the database" })
+        }
+        // Verify user exists in Stream Chat
+        const chatHistory = await db.select().from(chats).where(eq(chats.userId, userId))
+        res.status(200).json({ messages: chatHistory })
+    } catch (error) {
+        return res.status(500).json({ error: "Failed to get messages" })
     }
 })
 
