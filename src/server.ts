@@ -106,10 +106,24 @@ app.post("/chat", async (req: Request, res: Response): Promise<any> => {
         //         { role: "system", content: message }],
         // });
 
+        //Fetch Users past messages for context
+        const chatHistory = await db.select().from(chats).where(eq(chats.userId, userId)).orderBy(chats.createdAt).limit(10)
+
+        //Format the chat history
+        const conversation = chatHistory.flatMap(chat => [
+            { role: 'user', parts: [{ text: chat.message }] },
+            { role: 'model', parts: [{ text: chat.reply }] }
+        ])
+
+        //Add latest user messages to the conversation
+        conversation.push({
+            role: 'user',
+            parts: [{ text: message }]
+        })
         // If you want to use Google GenAI instead, you can uncomment the following lines
         const model = genai.getGenerativeModel({ model: "gemini-1.5-flash" })
-        const question = await model.generateContent(message)
-        const resultFromGenAI: string = (await question.response.text()) ?? "No response from AI"
+        const result = await model.generateContent({ contents: conversation })
+        const resultFromGenAI = result.response.text() ?? "No response from AI"
 
         await db.insert(chats).values({ userId, message, reply: resultFromGenAI })
 
@@ -117,7 +131,8 @@ app.post("/chat", async (req: Request, res: Response): Promise<any> => {
         const channel = chatClient.channel('messaging', `chat-${userId}`, {
             name: 'AI Chat',
             created_by_id: 'ai_bot'
-        })
+        } as any)
+
         await channel.create()
         await channel.sendMessage({
             text: resultFromGenAI,
